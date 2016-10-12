@@ -14,8 +14,27 @@ try:
 except ImportError:
     import urllib3
 
-
 RecentlyUsedContainer = urllib3._collections.RecentlyUsedContainer
+
+
+# Monkey-patching: urllib3.is_connection_dropped calls select() on our
+# NpipeSocket object which breaks on Windows because it only works on
+# (real) sockets.
+def is_connection_dropped(*args, **kwargs):
+    return False
+
+
+def check_socket_type(f):
+    def wrapped(conn):
+         sock = getattr(conn, 'sock', False)
+        if sock and isinstance(sock, NpipeSocket):
+            return sock._closed
+        return f(conn)
+    return wrapped
+
+urllib3.util.connection.is_connection_dropped = check_socket_type(
+    urllib3.util.connection.is_connection_dropped
+)
 
 
 class NpipeHTTPConnection(httplib.HTTPConnection, object):
